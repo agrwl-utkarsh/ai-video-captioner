@@ -1,6 +1,7 @@
 # Python
 backend/venv/
 backend/uploads/
+backend/outputs/
 __pycache__/
 *.py[cod]
 *.egg-info/
