@@ -1,0 +1,19 @@
+# Python
+backend/venv/
+backend/uploads/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# Node
+frontend/node_modules/
+frontend/build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Misc junk files
+Untitled
