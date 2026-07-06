@@ -26,7 +26,8 @@ function App() {
     formData.append('video', file);
 
     try {
-      const response = await axios.post('http://localhost:5000/transcribe', formData, {
+      const API_BASE = process.env.REACT_APP_API_URL || '';
+      const response = await axios.post(`${API_BASE}/transcribe`, formData, {
         onUploadProgress: (progressEvent) => {
           const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           // We show up to 90% for upload, the last 10% is AI processing

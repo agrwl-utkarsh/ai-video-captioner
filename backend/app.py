@@ -79,7 +79,7 @@ def transcribe():
             return jsonify({"error": "FFmpeg burning failed"}), 500
 
         return jsonify({
-            "videoUrl": f"http://localhost:5000/download/{output_video_name}"
+            "videoUrl": f"{request.host_url}download/{output_video_name}"
         })
 
     except Exception as e:
