@@ -1,0 +1,15 @@
+---
+description: Start dev servers and open the app in Microsoft Edge
+alwaysApply: true
+---
+
+# Dev servers on Edge
+
+When starting the frontend and backend for local development:
+
+1. Use `py app.py` in `backend/` (not `python` — it may not be on PATH)
+2. Use `npm start` in `frontend/` — Edge is configured via `frontend/.env`
+3. Open **http://localhost:3000** in Microsoft Edge, not Chrome or the default browser
+4. Alternatively run `.\start-dev.ps1` from the project root to start both and open Edge
+
+Edge path: `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`
