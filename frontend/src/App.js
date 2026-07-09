@@ -201,6 +201,28 @@ function App() {
     }
   };
 
+  const startPollingRenderStatus = (id) => {
+    const timer = setInterval(async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/videos/${id}`);
+        if (res.data.status === 'completed' && res.data.renderedUrl) {
+          clearInterval(timer);
+          setRenderedVideoUrl(res.data.renderedUrl);
+          setRendering(false);
+          alert("Video rendered successfully!");
+        } else if (res.data.status === 'error') {
+          clearInterval(timer);
+          setRendering(false);
+          alert("FFmpeg render failed:\n" + res.data.error_message);
+        }
+      } catch (err) {
+        clearInterval(timer);
+        setRendering(false);
+        alert("Error polling render status.");
+      }
+    }, 2000);
+  };
+
   const handleBurnVideo = async () => {
     setRendering(true);
     setRenderedVideoUrl("");
@@ -217,11 +239,11 @@ function App() {
         italic,
         showSpeakerLabels
       });
-      setRenderedVideoUrl(res.data.videoUrl);
-      alert("Video rendered successfully!");
+      if (res.data.status === 'rendering') {
+        startPollingRenderStatus(videoId);
+      }
     } catch (err) {
-      alert("FFmpeg render failed. Check backend console logs!");
-    } finally {
+      alert("FFmpeg render failed to start. Make sure backend is running.");
       setRendering(false);
     }
   };

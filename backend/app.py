@@ -374,12 +374,54 @@ def export_captions(video_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def run_burning(video_id, video_path, srt_path, style_str, show_speakers, out_path):
+    conn = db.get_db()
+    cursor = conn.cursor()
+    try:
+        # Generate styled SRT content from database segments
+        cursor.execute("SELECT * FROM segments WHERE video_id = ? ORDER BY display_order ASC", (video_id,))
+        rows = cursor.fetchall()
+        
+        srt_content = ""
+        for i, r in enumerate(rows):
+            text = r['text']
+            if show_speakers:
+                text = f"[{r['speaker']}]: {text}"
+            srt_content += f"{i+1}\n{format_timestamp_srt(r['start_time'])} --> {format_timestamp_srt(r['end_time'])}\n{text}\n\n"
+            
+        with open(srt_path, 'w', encoding='utf-8') as f:
+            f.write(srt_content)
+            
+        safe_srt = srt_path.replace('\\', '/').replace(':', '\\:')
+        
+        # Use superfast preset for optimized background rendering speed
+        cmd = [
+            'ffmpeg', '-y', '-i', video_path,
+            '-vf', f"subtitles='{safe_srt}':force_style='{style_str}'",
+            '-c:v', 'libx264', '-preset', 'superfast',
+            '-c:a', 'copy', out_path
+        ]
+        
+        print(f"Executing FFmpeg for {video_id}: {' '.join(cmd)}")
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if res.returncode != 0:
+            raise Exception(res.stderr)
+            
+        cursor.execute("UPDATE videos SET status = 'completed', error_message = NULL WHERE id = ?", (video_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"Burn error for {video_id}: {str(e)}")
+        cursor.execute("UPDATE videos SET status = 'error', error_message = ? WHERE id = ?", (str(e), video_id))
+        conn.commit()
+    finally:
+        conn.close()
+
 @app.route('/api/videos/<video_id>/burn', methods=['POST'])
 def burn_captions(video_id):
     data = request.json or {}
     show_speakers = bool(data.get('showSpeakerLabels', False))
     
-    # Custom Subtitle Styling properties
     font_color = web_to_ass_color(data.get('fontColor', '#FFFF00'), 1.0)
     border_color = web_to_ass_color(data.get('borderColor', '#000000'), 1.0)
     font_size = int(data.get('fontSize', 24))
@@ -389,14 +431,12 @@ def burn_captions(video_id):
     bold = 1 if data.get('bold') else 0
     italic = 1 if data.get('italic') else 0
     
-    # BorderStyle = 3 if bgOpacity > 0 (grows background box around text) otherwise Outline (1)
     bg_opacity = float(data.get('bgOpacity', 0.0))
     border_style = 3 if bg_opacity > 0.0 else 1
     
-    # Find original video path
     ext = ""
     for file in os.listdir(UPLOAD_FOLDER):
-        if file.startswith(video_id) and not file.endswith('.srt'):
+        if file.startswith(video_id) and not file.endswith('.srt') and not file.startswith('captioned_'):
             ext = os.path.splitext(file)[1]
             break
             
@@ -408,47 +448,36 @@ def burn_captions(video_id):
     out_filename = f"captioned_{video_id}.mp4"
     out_path = os.path.join(OUTPUT_FOLDER, out_filename)
     
+    style_str = (
+        f"Fontname={font_family},FontSize={font_size},PrimaryColour={font_color},"
+        f"OutlineColour={border_color},BackColour={bg_color},BorderStyle={border_style},"
+        f"Outline={border_width},Shadow=1,Alignment=2,Bold={bold},Italic={italic}"
+    )
+    
+    # Mark status as rendering
     conn = db.get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM segments WHERE video_id = ? ORDER BY display_order ASC", (video_id,))
-    rows = cursor.fetchall()
+    cursor.execute("UPDATE videos SET status = 'rendering', error_message = NULL WHERE id = ?", (video_id,))
+    conn.commit()
     conn.close()
     
-    if not rows:
-        return jsonify({"error": "No caption segments found. Transcribe first!"}), 404
-        
-    try:
-        # Create temp SRT file for FFmpeg subtitles
-        srt_content = ""
-        for i, r in enumerate(rows):
-            text = r['text']
-            if show_speakers:
-                text = f"[{r['speaker']}]: {text}"
-            srt_content += f"{i+1}\n{format_timestamp_srt(r['start_time'])} --> {format_timestamp_srt(r['end_time'])}\n{text}\n\n"
+    if os.path.exists(out_path):
+        try:
+            os.remove(out_path)
+        except:
+            pass
             
-        with open(srt_path, 'w', encoding='utf-8') as f:
-            f.write(srt_content)
-            
-        # Advanced FFmpeg force_style String
-        style_str = (
-            f"Fontname={font_family},FontSize={font_size},PrimaryColour={font_color},"
-            f"OutlineColour={border_color},BackColour={bg_color},BorderStyle={border_style},"
-            f"Outline={border_width},Shadow=1,Alignment=2,Bold={bold},Italic={italic}"
-        )
-        
-        safe_srt = srt_path.replace('\\', '/').replace(':', '\\:')
-        cmd = [
-            'ffmpeg', '-y', '-i', video_path,
-            '-vf', f"subtitles='{safe_srt}':force_style='{style_str}'",
-            '-c:a', 'copy', out_path
-        ]
-        
-        # Run FFmpeg
-        subprocess.run(cmd, check=True)
-        
-        return jsonify({"videoUrl": f"http://localhost:5000/outputs/{out_filename}"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Spawn burning thread
+    thread = threading.Thread(
+        target=run_burning, 
+        args=(video_id, video_path, srt_path, style_str, show_speakers, out_path)
+    )
+    thread.start()
+    
+    return jsonify({
+        "status": "rendering",
+        "message": "Video rendering started in background."
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
