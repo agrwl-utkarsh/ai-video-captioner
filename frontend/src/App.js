@@ -8,77 +8,90 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  const [speaker, setSpeaker] = useState("");
+  const [color, setColor] = useState("&H00FFFF");
+  const [fontSize, setFontSize] = useState("22");
+
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000';
+
   const generateCaptions = async () => {
-    if (!file) return alert("Please select a video file!");
+    if (!file) return alert("Select a video!");
     setLoading(true);
     setVideoUrl("");
     setProgress(0);
 
     const formData = new FormData();
     formData.append('video', file);
+    formData.append('speaker', speaker);
+    formData.append('color', color);
+    formData.append('fontSize', fontSize);
 
     try {
-      const res = await axios.post('http://localhost:5000/transcribe', formData, {
-        onUploadProgress: (p) => {
-          const percent = Math.round((p.loaded * 100) / p.total);
-          setProgress(percent > 90 ? 90 : percent); // Hold at 90 during AI burn
-        }
+      const res = await axios.post(`${apiBaseUrl}/transcribe`, formData, {
+        onUploadProgress: (p) => setProgress(Math.round((p.loaded * 100) / p.total) * 0.9)
       });
       setVideoUrl(res.data.videoUrl);
       setProgress(100);
     } catch (err) {
-      alert("Error: Make sure the Python backend is running.");
+      alert("Error: Check backend.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDownload = async () => {
-    const res = await fetch(videoUrl);
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "captioned_video.mp4";
-    a.click();
-  };
-
   return (
     <div className="app-container">
-      <div className="main-card">
-        <h1>🎬 AI Captioner <span className="local-tag">LOCAL</span></h1>
-        
-        {!loading && !videoUrl && (
-          <div className="upload-box">
-            <input type="file" id="file" onChange={(e) => setFile(e.target.files[0])} hidden />
-            <label htmlFor="file" className="drop-zone">
-              {file ? `✅ ${file.name}` : "📂 Click to Select Video"}
-            </label>
-            {file && <button onClick={generateCaptions} className="btn-primary">Generate Captioned Video</button>}
-          </div>
-        )}
+      <div className="layout">
 
-        {loading && (
-          <div className="loader-box">
-            <div className="spinner"></div>
-            <p>{progress < 90 ? `Uploading: ${progress}%` : "AI is burning captions..."}</p>
-            <div className="progress-bg">
-              <div className="progress-fill" style={{ width: `${progress}%` }}></div>
-            </div>
-          </div>
-        )}
+        <aside className="sidebar">
+          <h3>🎨 Caption Styles</h3>
+          <label>Speaker Name</label>
+          <input type="text" value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder="e.g. Alex" />
 
-        {videoUrl && (
-          <div className="result-box">
-            <video width="100%" controls key={videoUrl} className="preview-player">
-              <source src={videoUrl} type="video/mp4" />
-            </video>
-            <div className="action-row">
-              <button onClick={handleDownload} className="btn-success">💾 Download Video</button>
-              <button onClick={() => {setFile(null); setVideoUrl("");}} className="btn-outline">🔄 New Video</button>
-            </div>
+          <label>Font Color</label>
+          <select value={color} onChange={(e) => setColor(e.target.value)}>
+            <option value="&H00FFFF">Yellow</option>
+            <option value="&HFFFFFF">White</option>
+            <option value="&H00FF00">Green</option>
+            <option value="&H0000FF">Red</option>
+          </select>
+
+          <label>Font Size</label>
+          <input type="range" min="14" max="40" value={fontSize} onChange={(e) => setFontSize(e.target.value)} />
+          <span>{fontSize}px</span>
+        </aside>
+
+        <main className="main-content">
+          <div className="glass-card">
+            <h1>🎬 AI Video Editor</h1>
+
+            {!loading && !videoUrl && (
+              <div className="upload-section">
+                <input type="file" id="vid" onChange={(e) => setFile(e.target.files[0])} hidden />
+                <label htmlFor="vid" className="dropzone">{file ? `✅ ${file.name}` : "📂 Drop Video Here"}</label>
+                {file && <button onClick={generateCaptions} className="btn-main">Generate with Styles</button>}
+              </div>
+            )}
+
+            {loading && (
+              <div className="loader">
+                <div className="spinner"></div>
+                <p>Engine Working: {Math.round(progress)}%</p>
+                <div className="bar"><div className="fill" style={{ width: `${progress}%` }}></div></div>
+              </div>
+            )}
+
+            {videoUrl && (
+              <div className="result">
+                <video width="100%" controls key={videoUrl}><source src={videoUrl} type="video/mp4" /></video>
+                <div className="btn-group">
+                  <button onClick={() => window.open(videoUrl)} className="btn-success">💾 Save Video</button>
+                  <button onClick={() => { setVideoUrl(""); setFile(null); }} className="btn-outline">🔄 Reset</button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </main>
       </div>
     </div>
   );
