@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { 
-  Play, Save, Download, FileVideo, Trash2, Plus, 
+  Download, FileVideo, Trash2, 
   Globe, Sliders, Sparkles, RotateCcw, UploadCloud, Type
 } from 'lucide-react';
 import './App.css';
@@ -53,9 +53,6 @@ function App() {
   const [rendering, setRendering] = useState(false);
   const [renderedVideoUrl, setRenderedVideoUrl] = useState("");
   
-  // Saving Timings / Text state
-  const [savingSegments, setSavingSegments] = useState(false);
-
   // Fetch Presets on Mount
   useEffect(() => {
     fetchPresets();
@@ -168,62 +165,6 @@ function App() {
       setSegments(res.data.segments);
     } catch (err) {
       alert("Failed to load transcribed segments");
-    }
-  };
-
-  // Segment modifications
-  const handleSegmentChange = (index, field, value) => {
-    const updated = [...segments];
-    if (field === 'start_time' || field === 'end_time') {
-      updated[index][field] = parseFloat(value) || 0;
-    } else {
-      updated[index][field] = value;
-    }
-    setSegments(updated);
-  };
-
-  const addSegment = (index) => {
-    const updated = [...segments];
-    const prevSeg = segments[index];
-    const newSeg = {
-      id: Date.now(), // Temporary key
-      start_time: prevSeg ? prevSeg.end_time : 0,
-      end_time: prevSeg ? prevSeg.end_time + 2.0 : 2.0,
-      text: "New Subtitle Text",
-      speaker: prevSeg ? prevSeg.speaker : "Speaker 1",
-      display_order: index + 2
-    };
-    updated.splice(index + 1, 0, newSeg);
-    // Recalculate order
-    const reordered = updated.map((s, idx) => ({ ...s, display_order: idx + 1 }));
-    setSegments(reordered);
-  };
-
-  const deleteSegment = (index) => {
-    const updated = segments.filter((_, i) => i !== index);
-    const reordered = updated.map((s, idx) => ({ ...s, display_order: idx + 1 }));
-    setSegments(reordered);
-  };
-
-  const saveSegmentsToDB = async () => {
-    setSavingSegments(true);
-    try {
-      await axios.put(`http://localhost:5000/api/videos/${videoId}/segments`, {
-        segments
-      });
-      alert("Timings and text saved successfully!");
-    } catch (err) {
-      alert("Failed to save segments to database");
-    } finally {
-      setSavingSegments(false);
-    }
-  };
-
-  // Video Jump Function
-  const jumpToTime = (seconds) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = seconds;
-      videoRef.current.play().catch(() => {});
     }
   };
 
