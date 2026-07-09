@@ -1,31 +1,38 @@
 import os
 import subprocess
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+import shutil
+import torch
 import whisper
 import datetime
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
+# Paths setup
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 OUTPUT_FOLDER = os.path.join(BASE_DIR, 'outputs')
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+def startup_cleanup():
+    """Wipe old files so local disk stays clean"""
+    for folder in [UPLOAD_FOLDER, OUTPUT_FOLDER]:
+        if os.path.exists(folder):
+            shutil.rmtree(folder)
+        os.makedirs(folder)
 
-print("Loading Whisper AI Model...")
-model = whisper.load_model("base")
+startup_cleanup()
+
+# Check for GPU (Speed optimization)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"--- AI ENGINE STARTING ON: {device.upper()} ---")
+model = whisper.load_model("base", device=device)
 
 def format_timestamp(seconds: float):
     td = datetime.timedelta(seconds=seconds)
-    total_seconds = int(td.total_seconds())
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
-    secs = total_seconds % 60
-    millis = int(td.microseconds / 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+    ts = int(td.total_seconds())
+    return f"{ts//3600:02d}:{(ts%3600)//60:02d}:{ts%60:02d},{int(td.microseconds/1000):03d}"
 
 @app.route('/download/<filename>')
 def download_file(filename):
@@ -42,48 +49,38 @@ def transcribe():
     
     video_path = os.path.join(UPLOAD_FOLDER, video_filename)
     srt_path = os.path.join(UPLOAD_FOLDER, f"{clean_name}.srt")
-    output_video_name = f"captioned_{clean_name}.mp4"
-    output_video_path = os.path.join(OUTPUT_FOLDER, output_video_name)
+    out_name = f"captioned_{clean_name}.mp4"
+    out_path = os.path.join(OUTPUT_FOLDER, out_name)
     
     file.save(video_path)
 
     try:
-        # Step 1: AI Transcription
-        print(f"Processing: {video_filename}")
+        print(f"--- AI Processing: {video_filename} ---")
         result = model.transcribe(video_path)
 
-        # Step 2: Create SRT
         srt_content = ""
-        for i, segment in enumerate(result['segments']):
-            start = format_timestamp(segment['start'])
-            end = format_timestamp(segment['end'])
-            text = segment['text'].strip()
-            srt_content += f"{i + 1}\n{start} --> {end}\n{text}\n\n"
+        for i, s in enumerate(result['segments']):
+            srt_content += f"{i+1}\n{format_timestamp(s['start'])} --> {format_timestamp(s['end'])}\n{s['text'].strip()}\n\n"
         
         with open(srt_path, "w", encoding="utf-8") as f:
             f.write(srt_content)
 
-        # Step 3: Burn Subtitles (The Windows Fix)
-        safe_srt_path = srt_path.replace('\\', '/').replace(':', '\\:')
+        # Windows Path Fix for FFmpeg
+        safe_srt = srt_path.replace('\\', '/').replace(':', '\\:')
         
-        # Style: Yellow font, bottom aligned, bold
         cmd = [
             'ffmpeg', '-y', '-i', video_path, 
-            '-vf', f"subtitles='{safe_srt_path}':force_style='FontSize=20,PrimaryColour=&H00FFFF,Bold=1,Alignment=2'", 
-            '-c:a', 'copy', output_video_path
+            '-vf', f"subtitles='{safe_srt}':force_style='FontSize=22,PrimaryColour=&H00FFFF,Bold=1'", 
+            '-c:a', 'copy', out_path
         ]
         
-        process = subprocess.run(cmd, capture_output=True, text=True)
-        if process.returncode != 0:
-            print("FFmpeg Error:", process.stderr)
-            return jsonify({"error": "FFmpeg burning failed"}), 500
-
-        return jsonify({
-            "videoUrl": f"{request.host_url}download/{output_video_name}"
-        })
+        subprocess.run(cmd, check=True)
+        print(f"--- Successfully created: {out_name} ---")
+        return jsonify({"videoUrl": f"http://localhost:5000/download/{out_name}"})
 
     except Exception as e:
+        print(f"Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, port=5000)

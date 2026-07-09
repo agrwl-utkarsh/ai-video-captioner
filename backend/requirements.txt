@@ -1,6 +1,6 @@
 flask
 flask-cors
 openai-whisper
-moviepy
+torch
 python-dotenv
 gunicorn

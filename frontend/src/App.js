@@ -8,109 +8,74 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // 1. Handles file selection
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-    setVideoUrl(""); // Reset if they pick a new file
-    setProgress(0);
-  };
-
-  // 2. The Generation Process
-  const generateCaptionedVideo = async () => {
-    if (!file) return alert("Please select a video file first!");
-    
+  const generateCaptions = async () => {
+    if (!file) return alert("Please select a video file!");
     setLoading(true);
+    setVideoUrl("");
     setProgress(0);
 
     const formData = new FormData();
     formData.append('video', file);
 
-    const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000';
-
     try {
-      const response = await axios.post(`${apiBaseUrl}/transcribe`, formData, {
-        onUploadProgress: (progressEvent) => {
-          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          // We show up to 90% for upload, the last 10% is AI processing
-          setProgress(percent > 90 ? 90 : percent);
-        },
+      const res = await axios.post('http://localhost:5000/transcribe', formData, {
+        onUploadProgress: (p) => {
+          const percent = Math.round((p.loaded * 100) / p.total);
+          setProgress(percent > 90 ? 90 : percent); // Hold at 90 during AI burn
+        }
       });
-
-      setVideoUrl(response.data.videoUrl);
+      setVideoUrl(res.data.videoUrl);
       setProgress(100);
-    } catch (error) {
-      console.error(error);
-      alert("Processing failed. Check if your Backend Terminal is running.");
+    } catch (err) {
+      alert("Error: Make sure the Python backend is running.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Force Download Logic
   const handleDownload = async () => {
-    const response = await fetch(videoUrl);
-    const blob = await response.blob();
+    const res = await fetch(videoUrl);
+    const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = "captioned_video.mp4";
-    document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="app-wrapper">
-      <div className="glass-card">
-        <header>
-          <h1>🎬 AI Video Captioner</h1>
-          <p>Burn professional captions into your videos automatically.</p>
-        </header>
-
-        {/* STEP 1: UPLOAD & GENERATE */}
+    <div className="app-container">
+      <div className="main-card">
+        <h1>🎬 AI Captioner <span className="local-tag">LOCAL</span></h1>
+        
         {!loading && !videoUrl && (
-          <div className="upload-zone">
-            <div className="file-input-wrapper">
-              <input type="file" id="video-upload" onChange={handleFileChange} accept="video/*" />
-              <label htmlFor="video-upload">
-                {file ? file.name : "📁 Choose a Video File"}
-              </label>
-            </div>
-            {file && (
-              <button onClick={generateCaptionedVideo} className="btn-generate">
-                ✨ Generate Captioned Video
-              </button>
-            )}
+          <div className="upload-box">
+            <input type="file" id="file" onChange={(e) => setFile(e.target.files[0])} hidden />
+            <label htmlFor="file" className="drop-zone">
+              {file ? `✅ ${file.name}` : "📂 Click to Select Video"}
+            </label>
+            {file && <button onClick={generateCaptions} className="btn-primary">Generate Captioned Video</button>}
           </div>
         )}
 
-        {/* STEP 2: LOADER (0-100%) */}
         {loading && (
-          <div className="loader-container">
+          <div className="loader-box">
             <div className="spinner"></div>
-            <p>{progress < 90 ? `Uploading: ${progress}%` : "AI is burning captions... almost done!"}</p>
-            <div className="progress-bar">
+            <p>{progress < 90 ? `Uploading: ${progress}%` : "AI is burning captions..."}</p>
+            <div className="progress-bg">
               <div className="progress-fill" style={{ width: `${progress}%` }}></div>
             </div>
           </div>
         )}
 
-        {/* STEP 3: PREVIEW & DOWNLOAD */}
         {videoUrl && (
-          <div className="result-container">
-            <div className="video-wrapper">
-              <video width="100%" controls key={videoUrl}>
-                <source src={videoUrl} type="video/mp4" />
-              </video>
-            </div>
-            
-            <div className="actions">
-              <button onClick={handleDownload} className="btn-download">
-                💾 Download Captioned Video
-              </button>
-              <button onClick={() => {setVideoUrl(""); setFile(null);}} className="btn-outline">
-                🔄 Start New Video
-              </button>
+          <div className="result-box">
+            <video width="100%" controls key={videoUrl} className="preview-player">
+              <source src={videoUrl} type="video/mp4" />
+            </video>
+            <div className="action-row">
+              <button onClick={handleDownload} className="btn-success">💾 Download Video</button>
+              <button onClick={() => {setFile(null); setVideoUrl("");}} className="btn-outline">🔄 New Video</button>
             </div>
           </div>
         )}
@@ -118,5 +83,4 @@ function App() {
     </div>
   );
 }
-
 export default App;
