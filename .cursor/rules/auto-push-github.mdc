@@ -1,0 +1,36 @@
+---
+description: Push code changes to GitHub proactively after completing work
+alwaysApply: true
+---
+
+# Auto-push to GitHub
+
+After making meaningful code changes in this repo, commit and push to GitHub without asking the user first.
+
+## When to push
+
+- After completing a feature, bug fix, or refactor
+- After applying a batch of related file updates
+- Do not push mid-task if more edits are clearly still in progress
+
+## Workflow
+
+1. Run `git status` and `git diff` to review changes
+2. Stage only relevant files (never `.env`, credentials, or generated output like `backend/outputs/`)
+3. Commit with a concise message focused on why
+4. Push to `origin main` (or the current branch)
+5. Briefly tell the user what was pushed — do not ask for permission first
+
+## Git identity
+
+If commit fails due to missing user config, use inline author flags instead of changing git config:
+
+```powershell
+git -c user.name="uagar" -c user.email="uagar@users.noreply.github.com" commit -m "message"
+```
+
+## Do not
+
+- Force push to main
+- Commit secrets or generated artifacts
+- Ask "Want me to push?" after routine changes
